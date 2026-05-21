@@ -1,0 +1,5 @@
+# Jobright scraper — Python 3.10+
+Django>=4.2,<5
+playwright>=1.40,<2
+beautifulsoup4>=4.12,<5
+fake-useragent>=1.4,<2

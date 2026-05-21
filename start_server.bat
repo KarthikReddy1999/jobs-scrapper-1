@@ -1,0 +1,5 @@
+@echo off
+cd /d "%~dp0"
+echo Jobright standalone — http://127.0.0.1:8001/
+python manage.py runserver 8001 --noreload
+pause
