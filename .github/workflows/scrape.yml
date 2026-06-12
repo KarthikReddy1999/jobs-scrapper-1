@@ -1,7 +1,9 @@
 name: Trigger Jobright Scrape
 
 on:
-  workflow_dispatch:  # manual trigger only — add schedule cron after HF Space is set up
+  schedule:
+    - cron: '0 1,7,13,19 * * *'  # 4x daily at 1am, 7am, 1pm, 7pm UTC (offset from LinkedIn scraper)
+  workflow_dispatch:
 
 jobs:
   scrape:

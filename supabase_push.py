@@ -4,17 +4,13 @@ import os
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://dyguncqqjzuyiwxhgwcw.supabase.co")
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-EMAIL = os.environ.get("EMAIL", "")
-PASSWORD = os.environ.get("PASSWORD", "")
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 
 def _get_client():
     from supabase import create_client
-    client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-    client.auth.sign_in_with_password({"email": EMAIL, "password": PASSWORD})
-    return client
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
 def push_jobs_to_supabase() -> dict:
@@ -26,27 +22,32 @@ def push_jobs_to_supabase() -> dict:
         return {"inserted": 0, "failed": 0}
 
     client = _get_client()
-    inserted = 0
-    failed = 0
 
-    for job in jobs:
-        row = {
+    rows = [
+        {
             "title": job.title,
             "company": job.company,
             "location": job.location,
             "external_apply_link": job.apply_url,
-            "source": job.source or "Jobright",
-            "employment_type": "Full Time",
             "is_published": True,
             "is_reviewing": False,
             "is_archived": False,
+            "ingested_via": "jobright",
+            "is_direct_apply": True,
+            "description_enriched": False,
+            "description_source": "original",
         }
-        try:
-            client.table("jobs").upsert(row, on_conflict="external_apply_link").execute()
-            inserted += 1
-        except Exception as exc:
-            logger.error("Failed to push '%s @ %s': %s", job.title, job.company, exc)
-            failed += 1
+        for job in jobs
+    ]
+
+    try:
+        response = client.table("jobs").upsert(rows, ignore_duplicates=True).execute()
+        inserted = len(response.data) if response.data else 0
+        failed = 0
+    except Exception as exc:
+        logger.error("Bulk push failed: %s", exc)
+        inserted = 0
+        failed = len(rows)
 
     logger.info("Supabase push done: %d inserted, %d failed", inserted, failed)
     return {"inserted": inserted, "failed": failed}
