@@ -11,6 +11,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.db import IntegrityError, close_old_connections
+from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 from playwright.sync_api import sync_playwright
 
@@ -505,6 +506,8 @@ class JobrightScraper:
             title = (jr.get("jobTitle") or "").strip()
             company = (cr.get("companyName") or "").strip()
             location = (jr.get("jobLocation") or "United States").strip()
+            raw_desc = jr.get("jobDescription") or ""
+            description = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n", strip=True) if raw_desc else ""
 
             if job_exists(title, company, location, apply_url):
                 self.state.jobs_skipped += 1
@@ -523,6 +526,7 @@ class JobrightScraper:
                     posted_time=posted_label,
                     posted_at=posted_ts or int(time.time()),
                     jobright_job_id=job_id,
+                    description=description,
                 )
             except IntegrityError:
                 self.state.jobs_skipped += 1

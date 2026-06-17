@@ -34,6 +34,7 @@ def push_jobs_to_supabase() -> dict:
             "is_archived": False,
             "ingested_via": "jobright",
             "is_direct_apply": True,
+            "description": job.description or None,
             "description_enriched": False,
             "description_source": "original",
         }

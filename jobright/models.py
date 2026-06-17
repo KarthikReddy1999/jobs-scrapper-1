@@ -11,6 +11,7 @@ class JobrightJob(models.Model):
     posted_time = models.CharField(max_length=100)
     posted_at = models.PositiveIntegerField(default=0, db_index=True)
     jobright_job_id = models.CharField(max_length=64, blank=True, db_index=True)
+    description = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
