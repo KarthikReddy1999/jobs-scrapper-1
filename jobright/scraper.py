@@ -539,6 +539,38 @@ class JobrightScraper:
 
         return self.state.jobs_saved - saved_before
 
+    def _scrape_role_requests(self, browser) -> None:
+        from role_requests import fetch_pending_role_requests, notify_role_complete
+        pending = fetch_pending_role_requests()
+        if not pending:
+            return
+        logger.info("Role requests: %d role(s) to scrape", len(pending))
+        for req in pending:
+            self._check_stop()
+            role = req["normalized_role"]
+            terms = req["search_terms"] or []
+            saved_before = self.state.jobs_saved
+            for i, term in enumerate(terms):
+                self._check_stop()
+                context = browser.new_context(user_agent=_ua.random, viewport={"width": 1400, "height": 900})
+                page = context.new_page()
+                try:
+                    self._process_keyword(page, context, term, i, len(terms))
+                except StopIteration:
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    raise
+                except Exception as exc:
+                    logger.error("Role request term failed '%s': %s", term, exc)
+                finally:
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+            notify_role_complete(role, self.state.jobs_saved - saved_before)
+
     def run(self):
         global _active_browser
         os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
@@ -571,6 +603,8 @@ class JobrightScraper:
                 browser = pw.chromium.launch(headless=True)
                 with _active_lock:
                     _active_browser = browser
+
+                self._scrape_role_requests(browser)
 
                 for ki in range(start_idx, total):
                     self._check_stop()
