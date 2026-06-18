@@ -23,6 +23,8 @@ def push_jobs_to_supabase() -> dict:
 
     client = _get_client()
 
+    BLOCKED_DOMAINS = ("jobright.ai", "jobright.com", "simplify.jobs", "linkedin.com")
+
     rows = [
         {
             "title": job.title,
@@ -39,6 +41,7 @@ def push_jobs_to_supabase() -> dict:
             "description_source": "original",
         }
         for job in jobs
+        if not any(d in (job.apply_url or "") for d in BLOCKED_DOMAINS)
     ]
 
     try:
