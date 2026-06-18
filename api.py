@@ -1,4 +1,4 @@
-"""FastAPI wrapper for Jobright scraper — deployed on Hugging Face Spaces (port 7860)."""
+"""FastAPI wrapper for Jobright scraper — deployed on Railway (port 7860)."""
 import asyncio
 import logging
 import os
@@ -8,6 +8,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 import django
 django.setup()
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Header, HTTPException
 
 from jobright.models import JobrightJob, JobrightScraperState
@@ -15,6 +17,7 @@ from jobright.scraper import is_scraper_running, start_scraper, stop_scraper
 from supabase_push import push_jobs_to_supabase
 
 app = FastAPI(title="Jobright Scraper", version="1.0.0")
+scheduler = AsyncIOScheduler()
 logger = logging.getLogger(__name__)
 
 API_SECRET = os.environ["WEBHOOK_SECRET"]
@@ -30,6 +33,33 @@ async def _push_when_done() -> None:
         push_jobs_to_supabase()
     except Exception as exc:
         logger.error("Supabase push failed: %s", exc)
+
+
+@app.on_event("startup")
+async def start_scheduler() -> None:
+    scheduler.add_job(
+        _scheduled_scrape,
+        CronTrigger(hour="1,7,13,19", minute="0"),
+        id="jobright_scrape",
+        misfire_grace_time=3600,
+    )
+    scheduler.start()
+    logger.info("Scheduler started — Jobright scrape at 01,07,13,19 UTC daily")
+
+
+@app.on_event("shutdown")
+async def stop_scheduler() -> None:
+    scheduler.shutdown(wait=False)
+
+
+async def _scheduled_scrape() -> None:
+    if is_scraper_running():
+        logger.info("Scheduled scrape skipped — already running")
+        return
+    ok, msg = start_scraper(resume=False)
+    if ok:
+        asyncio.create_task(_push_when_done())
+    logger.info("Scheduled scrape: %s", msg)
 
 
 @app.get("/")

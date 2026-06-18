@@ -349,10 +349,10 @@ class JobrightScraper:
 
         gh = _greenhouse_apply(context.request, job_title, company_name, company_url)
         if gh:
-            return gh
+            return gh, None
         lev = _lever_apply(context.request, job_title, company_name, company_url)
         if lev:
-            return lev
+            return lev, None
 
         captured_pages = []
 
@@ -369,6 +369,10 @@ class JobrightScraper:
 
         jr, cr = self._load_job_detail(page, job_id)
         company_url = company_url or (cr or {}).get("companyURL", "")
+
+        # Capture full description from detail page (richer than search-result preview)
+        _raw_detail = (jr or {}).get("jobDescription") or ""
+        detail_description = BeautifulSoup(_raw_detail, "html.parser").get_text(separator="\n", strip=True) if _raw_detail else None
 
         popup_urls = []
         page_urls = []
@@ -418,9 +422,9 @@ class JobrightScraper:
             ok, final = _is_job_page_ok(context.request, url, company_url)
             if ok:
                 logger.info("ATS OK %s -> %s", job_id, final[:90])
-                return final
+                return final, detail_description
 
-        return None
+        return None, None
 
     def _scan_company_careers(self, request_ctx, company_url, job_title):
         urls = []
@@ -489,7 +493,7 @@ class JobrightScraper:
             self.processed.add(job_id)
             self._human_delay(0.08, 0.25)
 
-            apply_url = self._extract_apply_url(
+            apply_url, detail_desc = self._extract_apply_url(
                 page,
                 context,
                 job_id,
@@ -507,7 +511,9 @@ class JobrightScraper:
             company = (cr.get("companyName") or "").strip()
             location = (jr.get("jobLocation") or "United States").strip()
             raw_desc = jr.get("jobDescription") or ""
-            description = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n", strip=True) if raw_desc else ""
+            search_desc = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n", strip=True) if raw_desc else ""
+            # Prefer detail-page description — it's the full JD vs the search-result preview
+            description = detail_desc if (detail_desc and len(detail_desc) > len(search_desc)) else search_desc
 
             if job_exists(title, company, location, apply_url):
                 self.state.jobs_skipped += 1

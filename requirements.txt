@@ -5,4 +5,5 @@ beautifulsoup4>=4.12,<5
 fake-useragent>=1.4,<2
 fastapi>=0.110,<1
 uvicorn[standard]>=0.29,<1
+apscheduler>=3.10,<4
 supabase>=2.4,<3
