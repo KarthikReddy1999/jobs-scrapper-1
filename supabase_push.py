@@ -45,7 +45,7 @@ def push_jobs_to_supabase() -> dict:
     ]
 
     try:
-        response = client.table("jobs").upsert(rows, ignore_duplicates=True).execute()
+        response = client.table("jobs").upsert(rows, on_conflict="external_apply_link", ignore_duplicates=True).execute()
         inserted = len(response.data) if response.data else 0
         failed = 0
     except Exception as exc:
