@@ -1,11 +1,20 @@
 """Read all JobrightJob records from Django SQLite and upsert into Supabase."""
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+_LOGO_DEV_KEY = os.getenv("LOGO_DEV_PUBLIC_KEY") or None
+
+
+def _logo_dev_url(company: str) -> str | None:
+    if not _LOGO_DEV_KEY:
+        return None
+    domain = re.sub(r"[^a-z0-9]", "", company.lower()) + ".com"
+    return f"https://img.logo.dev/{domain}?token={_LOGO_DEV_KEY}"
 
 
 def _get_client():
@@ -39,6 +48,7 @@ def push_jobs_to_supabase() -> dict:
             "description": job.description or None,
             "description_enriched": False,
             "description_source": "original",
+            "company_logo": _logo_dev_url(job.company),
         }
         for job in jobs
         if not any(d in (job.apply_url or "") for d in BLOCKED_DOMAINS)
