@@ -32,6 +32,37 @@ EXCLUDED_TITLE_WORDS = {
 }
 
 
+def _parse_visa_signals(description: str) -> dict:
+    if not description:
+        return {}
+    lower = description.lower()
+    opt_positive = any(p in lower for p in [
+        "opt accepted", "opt students", "opt eligible", "f-1 opt", "f1 opt",
+        "accepts opt", "welcome opt", "open to opt", "opt welcome",
+        "optional practical training", "opt candidates", "cpt/opt",
+        "opt/cpt", "f1 students welcome", "f-1 students",
+    ])
+    stem_opt = any(p in lower for p in [
+        "stem opt", "stem extension", "24-month opt", "24 month opt",
+        "stem designated", "stem degree",
+    ])
+    no_sponsorship = any(p in lower for p in [
+        "no sponsorship", "not sponsor", "unable to sponsor",
+        "cannot sponsor", "will not sponsor", "does not sponsor",
+        "sponsorship not available", "no visa sponsor",
+        "not provide sponsorship", "not able to sponsor",
+        "must be authorized to work in the u", "must be legally authorized",
+        "must have authorization to work", "must be eligible to work",
+        "citizen or permanent resident", "us citizen or green card",
+        "not support visa", "not offer sponsorship",
+    ])
+    if no_sponsorship:
+        return {"opt_accepting": False, "stem_opt_eligible": False, "no_sponsorship": True, "visa_confidence": "high"}
+    if opt_positive or stem_opt:
+        return {"opt_accepting": opt_positive, "stem_opt_eligible": stem_opt, "no_sponsorship": False, "visa_confidence": "high"}
+    return {"opt_accepting": False, "stem_opt_eligible": False, "no_sponsorship": False, "visa_confidence": "low"}
+
+
 def _is_excluded_title(title: str) -> bool:
     lower = title.lower()
     return any(kw in lower for kw in EXCLUDED_TITLE_WORDS)
@@ -83,6 +114,7 @@ def push_jobs_to_supabase() -> dict:
             "description_enriched": False,
             "description_source": "original",
             "company_logo": _logo_dev_url(job.company),
+            **_parse_visa_signals(job.description or ""),
         }
         for job in jobs
         if not any(d in (job.apply_url or "") for d in BLOCKED_DOMAINS)
