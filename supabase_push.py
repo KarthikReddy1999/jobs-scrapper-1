@@ -36,16 +36,6 @@ def _parse_visa_signals(description: str) -> dict:
     if not description:
         return {}
     lower = description.lower()
-    opt_positive = any(p in lower for p in [
-        "opt accepted", "opt students", "opt eligible", "f-1 opt", "f1 opt",
-        "accepts opt", "welcome opt", "open to opt", "opt welcome",
-        "optional practical training", "opt candidates", "cpt/opt",
-        "opt/cpt", "f1 students welcome", "f-1 students",
-    ])
-    stem_opt = any(p in lower for p in [
-        "stem opt", "stem extension", "24-month opt", "24 month opt",
-        "stem designated", "stem degree",
-    ])
     no_sponsorship = any(p in lower for p in [
         "no sponsorship", "not sponsor", "unable to sponsor",
         "cannot sponsor", "will not sponsor", "does not sponsor",
@@ -55,12 +45,46 @@ def _parse_visa_signals(description: str) -> dict:
         "must have authorization to work", "must be eligible to work",
         "citizen or permanent resident", "us citizen or green card",
         "not support visa", "not offer sponsorship",
+        "opt/cpt not", "opt candidates will not", "opt candidates are not",
+        "no f-1", "f-1 candidates will not", "f1 candidates will not",
+        "no cpt", "cpt not accepted", "f-1 visa not", "no opt candidates",
+        "not accepting opt", "not accept opt",
     ])
-    if no_sponsorship:
-        return {"opt_accepting": False, "stem_opt_eligible": False, "no_sponsorship": True, "visa_confidence": "high"}
-    if opt_positive or stem_opt:
-        return {"opt_accepting": opt_positive, "stem_opt_eligible": stem_opt, "no_sponsorship": False, "visa_confidence": "high"}
-    return {"opt_accepting": False, "stem_opt_eligible": False, "no_sponsorship": False, "visa_confidence": "low"}
+    opt_positive = not no_sponsorship and any(p in lower for p in [
+        "opt accepted", "opt students", "opt eligible", "f-1 opt", "f1 opt",
+        "accepts opt", "welcome opt", "open to opt", "opt welcome",
+        "optional practical training", "opt candidates", "cpt/opt",
+        "opt/cpt", "f1 students welcome", "f-1 students",
+    ])
+    stem_opt = not no_sponsorship and any(p in lower for p in [
+        "stem opt", "stem-opt", "stem extension", "24-month opt", "24 month opt",
+    ])
+    h1b_sponsoring = not no_sponsorship and any(p in lower for p in [
+        "h-1b sponsor", "h1b sponsor", "will sponsor h-1b", "will sponsor h1b",
+        "sponsorship available", "visa sponsorship provided", "we will sponsor",
+        "we sponsor visa", "sponsors h-1b", "h-1b transfer", "h1b transfer",
+        "provide visa sponsorship", "offer visa sponsorship",
+    ])
+    return {
+        "opt_accepting": opt_positive,
+        "stem_opt_eligible": stem_opt,
+        "no_sponsorship": no_sponsorship,
+        "h1b_sponsoring": h1b_sponsoring,
+        "visa_confidence": "high" if (no_sponsorship or opt_positive or stem_opt or h1b_sponsoring) else "low",
+    }
+
+
+def _parse_experience_level(description: str):
+    if not description:
+        return None
+    lower = description.lower()
+    if any(p in lower for p in ["5+ years", "6+ years", "7+ years", "8+ years", "10+ years", "5 or more years"]):
+        return "senior"
+    if any(p in lower for p in ["2-4 years", "3-5 years", "2+ years", "3+ years", "4+ years", "mid-level", "mid level"]):
+        return "mid"
+    if any(p in lower for p in ["entry level", "entry-level", "0-2 years", "1-2 years", "new grad", "recent graduate", "recent grad"]):
+        return "entry"
+    return None
 
 
 def _is_excluded_title(title: str) -> bool:
@@ -115,6 +139,7 @@ def push_jobs_to_supabase() -> dict:
             "description_source": "original",
             "company_logo": _logo_dev_url(job.company),
             **_parse_visa_signals(job.description or ""),
+            "experience_level": _parse_experience_level(job.description or ""),
         }
         for job in jobs
         if not any(d in (job.apply_url or "") for d in BLOCKED_DOMAINS)
