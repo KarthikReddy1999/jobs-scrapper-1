@@ -123,9 +123,14 @@ def push_jobs_to_supabase() -> dict:
 
     client = _get_client()
 
-    rows = [
-        {
-            "title": job.title,
+    from internship_detector import classify as classify_internship, passes_quality_gate
+
+    def _build_row(job):
+        desc = job.description or ""
+        title = job.title or ""
+        is_intern, intern_meta = classify_internship(title, desc)
+        row = {
+            "title": title,
             "company": job.company,
             "location": job.location,
             "external_apply_link": job.apply_url,
@@ -134,13 +139,23 @@ def push_jobs_to_supabase() -> dict:
             "is_archived": False,
             "ingested_via": "jobright",
             "is_direct_apply": True,
-            "description": job.description or None,
+            "description": desc or None,
             "description_enriched": False,
             "description_source": "original",
             "company_logo": _logo_dev_url(job.company),
-            **_parse_visa_signals(job.description or ""),
-            "experience_level": _parse_experience_level(job.description or ""),
+            **_parse_visa_signals(desc),
+            "experience_level": _parse_experience_level(desc),
         }
+        if is_intern:
+            row["employment_type"] = "Internship"
+            row["internship_metadata"] = intern_meta
+            if not passes_quality_gate(title, job.apply_url or "", intern_meta):
+                row["is_published"] = False
+                row["is_reviewing"] = True
+        return row
+
+    rows = [
+        _build_row(job)
         for job in jobs
         if not any(d in (job.apply_url or "") for d in BLOCKED_DOMAINS)
         and not _is_excluded_title(job.title or "")
