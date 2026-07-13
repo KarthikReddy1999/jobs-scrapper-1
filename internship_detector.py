@@ -15,27 +15,79 @@ from typing import Optional
 # Detection
 # ---------------------------------------------------------------------------
 
-# Only these title signals → internship. Description phrases are intentionally
-# excluded — they cause false positives on full-time roles.
+# Title keywords — matched with word boundaries so "intern" doesn't hit
+# "internal" / "international". Description phrases intentionally omitted
+# (they caused false positives on full-time jobs).
 _TITLE_INTERN_KEYWORDS = [
-    "intern", "internship", "co-op", "coop", "co op",
+    # Core — catches the vast majority across all sectors
+    "intern", "internship",
+
+    # Co-op / cooperative education (engineering schools, business programs)
+    "co-op", "coop", "co op", "cooperative education",
+
+    # Trainee & apprentice (manufacturing, engineering, healthcare, trades,
+    # management, aerospace, business development)
+    "trainee", "apprentice",
+
+    # Generic student roles
+    "student worker", "student employee",
+
+    # Healthcare-specific student / rotation titles
+    "student nurse", "nursing student",
+    "student pharmacist", "pharmacy student",
+    "dental student", "medical student",
+    "clinical student",
+
+    # Clinical rotations, externships (healthcare, dentistry, social work,
+    # education, pharmacy, architecture licensure AXP)
+    "practicum", "extern", "externship",
+
+    # Seasonal analyst / associate programs
+    # (finance, banking, consulting, PE, VC, asset management)
+    "summer analyst", "summer associate",
+    "spring analyst", "spring associate",
+    "fall analyst",   "fall associate",
+    "winter analyst", "winter associate",
+
+    # Rotational programs (mechanical, electrical, civil, aerospace,
+    # chemical engineering; business leadership programs)
+    "rotational program", "rotational analyst",
+    "rotational engineer", "rotational associate",
+
+    # Fellowship / research roles
+    # (AI/ML research labs, data science, biomedical, policy, healthcare)
+    "fellowship", "research fellow",
+    "research assistant",
+    "undergraduate researcher", "graduate researcher",
+
+    # Work-integrated learning
+    "work study", "work-study",
+
+    # Leadership / development programs aimed at students / new grads
+    # (business development, management, operations sectors)
+    "leadership development program",
 ]
 
-# Source employment type values that mean definitively NOT an internship.
+# Source employment-type values that mean "this is an internship/co-op".
+_SOURCE_INTERN = {
+    "internship", "intern", "co-op", "coop", "co op", "cooperative education",
+}
+
+# Source employment-type values recognised as non-internship
+# (kept for documentation; currently not used to hard-block title matches).
 _SOURCE_NON_INTERN = {
     "full time", "full-time", "fulltime", "full_time",
     "part time", "part-time", "parttime", "part_time",
     "contract", "contractor", "temporary", "temp", "permanent",
 }
 
-# Source employment type values that mean definitively an internship.
-_SOURCE_INTERN = {
-    "internship", "intern", "co-op", "coop", "co op", "cooperative education",
-}
 
-
-def _has_any(text: str, phrases: list[str]) -> bool:
-    return any(p in text for p in phrases)
+def _title_has_keyword(title_lower: str) -> bool:
+    """Word-boundary match so 'intern' doesn't hit 'internal'/'international'."""
+    for kw in _TITLE_INTERN_KEYWORDS:
+        if re.search(r'\b' + re.escape(kw) + r'\b', title_lower):
+            return True
+    return False
 
 
 def is_internship(
@@ -45,19 +97,17 @@ def is_internship(
 ) -> bool:
     """True if the job should be tagged as an internship.
 
-    Priority:
-    1. Source field says a non-internship type → always False.
-    2. Source field says internship/co-op → always True.
-    3. No/unknown source type → title keyword check only.
+    Priority order:
+    1. Source field explicitly says internship/co-op → True.
+    2. Job title contains an internship keyword → True.
+    3. Neither → False (description phrases intentionally not checked).
     """
     src = (source_employment_type or "").lower().strip()
-    if src in _SOURCE_NON_INTERN:
-        return False
     if src in _SOURCE_INTERN:
         return True
-    # Fall through to title check (description phrases intentionally omitted).
-    t_lower = (title or "").lower()
-    return _has_any(t_lower, _TITLE_INTERN_KEYWORDS)
+    if _title_has_keyword((title or "").lower()):
+        return True
+    return False
 
 
 _BAD_TITLE_ALONE = {
