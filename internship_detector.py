@@ -15,39 +15,49 @@ from typing import Optional
 # Detection
 # ---------------------------------------------------------------------------
 
+# Only these title signals → internship. Description phrases are intentionally
+# excluded — they cause false positives on full-time roles.
 _TITLE_INTERN_KEYWORDS = [
     "intern", "internship", "co-op", "coop", "co op",
-    "trainee", "student worker", "practicum",
-    "summer analyst", "summer associate",
-    "rotational program", "rotational analyst",
-    "apprentice",
 ]
 
-_DESC_INTERN_PHRASES = [
-    "currently enrolled", "must be a student", "must be currently enrolled",
-    "graduating in 20", "course credit", "school credit", "academic credit",
-    "for-credit only", "for credit only",
-    "actively pursuing a bachelor", "actively pursuing a master",
-    "pursuing a bachelor's", "pursuing a master's", "pursuing a phd",
-    "enrolled in an accredited",
-]
+# Source employment type values that mean definitively NOT an internship.
+_SOURCE_NON_INTERN = {
+    "full time", "full-time", "fulltime", "full_time",
+    "part time", "part-time", "parttime", "part_time",
+    "contract", "contractor", "temporary", "temp", "permanent",
+}
+
+# Source employment type values that mean definitively an internship.
+_SOURCE_INTERN = {
+    "internship", "intern", "co-op", "coop", "co op", "cooperative education",
+}
 
 
 def _has_any(text: str, phrases: list[str]) -> bool:
     return any(p in text for p in phrases)
 
 
-def is_internship(title: str, description: str = "") -> bool:
-    """True if the job should be tagged as an internship."""
+def is_internship(
+    title: str,
+    description: str = "",
+    source_employment_type: str = "",
+) -> bool:
+    """True if the job should be tagged as an internship.
+
+    Priority:
+    1. Source field says a non-internship type → always False.
+    2. Source field says internship/co-op → always True.
+    3. No/unknown source type → title keyword check only.
+    """
+    src = (source_employment_type or "").lower().strip()
+    if src in _SOURCE_NON_INTERN:
+        return False
+    if src in _SOURCE_INTERN:
+        return True
+    # Fall through to title check (description phrases intentionally omitted).
     t_lower = (title or "").lower()
-    if _has_any(t_lower, _TITLE_INTERN_KEYWORDS):
-        return True
-
-    d_lower = (description or "").lower()
-    if _has_any(d_lower, _DESC_INTERN_PHRASES):
-        return True
-
-    return False
+    return _has_any(t_lower, _TITLE_INTERN_KEYWORDS)
 
 
 _BAD_TITLE_ALONE = {
@@ -231,10 +241,14 @@ def extract_metadata(title: str, description: str = "") -> dict:
     }
 
 
-def classify(title: str, description: str = "") -> tuple[bool, dict]:
+def classify(
+    title: str,
+    description: str = "",
+    source_employment_type: str = "",
+) -> tuple[bool, dict]:
     """Convenience wrapper: (is_internship, metadata_dict).
     metadata is empty {} when not an internship."""
-    if not is_internship(title, description):
+    if not is_internship(title, description, source_employment_type):
         return False, {}
     return True, extract_metadata(title, description)
 
