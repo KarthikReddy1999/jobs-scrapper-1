@@ -183,9 +183,14 @@ def push_jobs_to_supabase() -> dict:
     # sweep in sociax-scraper-cron/ats_scraper.py. Every row here came from a
     # fresh (non-resume) scrape pass, so "in `rows`" already means "confirmed
     # live right now" — see JobrightScraper.start_scraper(), which clears the
-    # local table before a fresh run.
+    # local table before a fresh run. Also un-archives, so a job that comes back
+    # after being archived isn't stuck hidden forever.
     touch_rows = [
-        {"external_apply_link": r["external_apply_link"], "last_seen_at": now_iso}
+        {
+            "external_apply_link": r["external_apply_link"],
+            "last_seen_at": now_iso,
+            "is_archived": False,
+        }
         for r in rows
         if r.get("external_apply_link")
     ]
