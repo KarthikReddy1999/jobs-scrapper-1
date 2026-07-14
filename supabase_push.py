@@ -2,6 +2,7 @@
 import logging
 import os
 import re
+from datetime import datetime, timezone
 
 import requests
 
@@ -125,6 +126,8 @@ def push_jobs_to_supabase() -> dict:
 
     from internship_detector import classify as classify_internship, passes_quality_gate
 
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     def _build_row(job):
         desc = job.description or ""
         title = job.title or ""
@@ -145,6 +148,7 @@ def push_jobs_to_supabase() -> dict:
             "company_logo": _logo_dev_url(job.company),
             **_parse_visa_signals(desc),
             "experience_level": _parse_experience_level(desc),
+            "last_seen_at": now_iso,
         }
         if is_intern:
             row["employment_type"] = "Internship"
@@ -172,6 +176,26 @@ def push_jobs_to_supabase() -> dict:
         return {"inserted": 0, "failed": len(rows)}
 
     logger.info("Supabase push done: %d inserted, %d failed", inserted, failed)
+
+    # Bump last_seen_at on already-existing rows — ignore_duplicates=True above
+    # means the full-row upsert skips them entirely on conflict, so without this
+    # a job jobright still shows every day would look stale to the 7-day expiry
+    # sweep in sociax-scraper-cron/ats_scraper.py. Every row here came from a
+    # fresh (non-resume) scrape pass, so "in `rows`" already means "confirmed
+    # live right now" — see JobrightScraper.start_scraper(), which clears the
+    # local table before a fresh run.
+    touch_rows = [
+        {"external_apply_link": r["external_apply_link"], "last_seen_at": now_iso}
+        for r in rows
+        if r.get("external_apply_link")
+    ]
+    if touch_rows:
+        try:
+            client.table("jobs").upsert(
+                touch_rows, on_conflict="external_apply_link", ignore_duplicates=False
+            ).execute()
+        except Exception as exc:
+            logger.error("last_seen_at touch failed: %s", exc)
 
     # Enrich unenriched jobright jobs (most recent first, capped to avoid timeout)
     result = (
