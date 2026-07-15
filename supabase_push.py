@@ -185,20 +185,22 @@ def push_jobs_to_supabase() -> dict:
     # live right now" — see JobrightScraper.start_scraper(), which clears the
     # local table before a fresh run. Also un-archives, so a job that comes back
     # after being archived isn't stuck hidden forever.
-    touch_rows = [
-        {
-            "external_apply_link": r["external_apply_link"],
-            "last_seen_at": now_iso,
-            "is_archived": False,
-        }
-        for r in rows
-        if r.get("external_apply_link")
-    ]
-    if touch_rows:
+    # Plain UPDATE, not upsert — an upsert with a minimal payload can get treated
+    # as an INSERT under read-after-write visibility lag right after the insert
+    # above, and fail NOT NULL on title (confirmed in production 2026-07-15,
+    # taking a whole batch down with it). UPDATE can never attempt an insert.
+    # Batched — .in_() puts every link in the URL query string, and this list
+    # can run to thousands of rows; too many blows past typical URL length
+    # limits (also confirmed in production, same day, in the id-list version
+    # of this pattern in ats_scraper.py).
+    links = [r["external_apply_link"] for r in rows if r.get("external_apply_link")]
+    touch_batch_size = 150
+    for i in range(0, len(links), touch_batch_size):
+        batch = links[i : i + touch_batch_size]
         try:
-            client.table("jobs").upsert(
-                touch_rows, on_conflict="external_apply_link", ignore_duplicates=False
-            ).execute()
+            client.table("jobs").update(
+                {"last_seen_at": now_iso, "is_archived": False}
+            ).in_("external_apply_link", batch).execute()
         except Exception as exc:
             logger.error("last_seen_at touch failed: %s", exc)
 
