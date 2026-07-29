@@ -48,6 +48,36 @@ ATS_DOMAINS = tuple(settings.ALLOWED_ATS)
 CAREER_PATH_SUFFIXES = ("", "/careers", "/jobs", "/career", "/join-us", "/work-with-us", "/open-positions")
 
 
+_EXCLUDED_TITLE_KEYWORDS = {
+    "senior", "staff", "principal", "lead", "manager", "director",
+    "clearance", "secret", "top secret", "ts/sci", "dod", "defense",
+    "intelligence", "classified",
+}
+
+
+def _is_excluded_title(title):
+    """Same seniority block-list as sociax-scraper-cron's ats_scraper.py.
+    Checked before _extract_apply_url so an obviously senior/staff/lead/
+    manager/director title never triggers that expensive detail-page load."""
+    lower = (title or "").lower()
+    return any(kw in lower for kw in _EXCLUDED_TITLE_KEYWORDS)
+
+
+def _requires_senior_experience(description):
+    """Description-text fallback for generic titles (e.g. plain 'Software
+    Engineer') that _is_excluded_title's title check can't catch — this
+    scraper previously had no experience-level filter of any kind."""
+    if not description:
+        return False
+    lower = description.lower()
+    senior_signals = [
+        "5+ years", "6+ years", "7+ years", "8+ years", "10+ years",
+        "5 or more years", "five or more years", "seven or more years",
+        "5 to ", "7 to ", "10 to ",
+    ]
+    return any(p in lower for p in senior_signals)
+
+
 def _title_match_score(want, found):
     if not want or not found:
         return 0.0
@@ -484,6 +514,8 @@ class JobrightScraper:
                 continue
             if not is_within_24h_from_publish(jr.get("publishTime"), jr.get("publishTimeDesc")):
                 continue
+            if _is_excluded_title(jr.get("jobTitle", "")):
+                continue
 
             posted_ts = parse_publish_time(jr.get("publishTime"))
             posted_label = format_posted_time(posted_ts) if posted_ts else jr.get("publishTimeDesc", "Recently")
@@ -514,6 +546,11 @@ class JobrightScraper:
             search_desc = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n", strip=True) if raw_desc else ""
             # Prefer detail-page description — it's the full JD vs the search-result preview
             description = detail_desc if (detail_desc and len(detail_desc) > len(search_desc)) else search_desc
+
+            if _requires_senior_experience(description):
+                self.state.jobs_skipped += 1
+                self._save_state(jobs_skipped=self.state.jobs_skipped)
+                continue
 
             if job_exists(title, company, location, apply_url):
                 self.state.jobs_skipped += 1
