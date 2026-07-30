@@ -70,10 +70,12 @@ def _requires_senior_experience(description):
     if not description:
         return False
     lower = description.lower()
+    # Threshold is 0-6 years accepted, 7+ rejected — "X to Y" ranges only
+    # trigger senior when the range's floor is unambiguously 7+.
     senior_signals = [
-        "5+ years", "6+ years", "7+ years", "8+ years", "10+ years",
-        "5 or more years", "five or more years", "seven or more years",
-        "5 to ", "7 to ", "10 to ",
+        "7+ years", "8+ years", "10+ years",
+        "seven or more years",
+        "7 to ", "10 to ",
     ]
     return any(p in lower for p in senior_signals)
 

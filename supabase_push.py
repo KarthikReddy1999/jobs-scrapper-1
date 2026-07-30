@@ -79,9 +79,9 @@ def _parse_experience_level(description: str):
     if not description:
         return None
     lower = description.lower()
-    if any(p in lower for p in ["5+ years", "6+ years", "7+ years", "8+ years", "10+ years", "5 or more years"]):
+    if any(p in lower for p in ["7+ years", "8+ years", "10+ years"]):
         return "senior"
-    if any(p in lower for p in ["2-4 years", "3-5 years", "2+ years", "3+ years", "4+ years", "mid-level", "mid level"]):
+    if any(p in lower for p in ["2-4 years", "3-5 years", "4-6 years", "2+ years", "3+ years", "4+ years", "5+ years", "6+ years", "5 or more years", "mid-level", "mid level"]):
         return "mid"
     if any(p in lower for p in ["entry level", "entry-level", "0-2 years", "1-2 years", "new grad", "recent graduate", "recent grad"]):
         return "entry"
